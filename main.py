@@ -1,4 +1,7 @@
+import os
+
 from fastapi import Depends, FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from sqlalchemy import Column, Integer, String, create_engine
 from sqlalchemy.orm import (
@@ -9,7 +12,7 @@ from sqlalchemy.orm import (
 
 # --- 1. DATABASE SETUP ---
 # This creates a file called 'database.db' in your folder
-SQLALCHEMY_DATABASE_URL = "sqlite:///./database.db"
+SQLALCHEMY_DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./database.db")
 
 # Create the SQLAlchemy engine
 engine = create_engine(
@@ -62,6 +65,10 @@ class ErrorResponse(BaseModel):
     detail: str
 
 
+class PasswordCreate(BaseModel):
+    password: str
+
+
 # --- 4. DEPENDENCY ---
 # This function opens a connection to the database,
 # yields it to our endpoint, then closes it.
@@ -75,6 +82,21 @@ def get_db():
 
 # --- 5. FASTAPI APP & ENDPOINTS ---
 app = FastAPI()
+
+cors_origins = os.getenv("CORS_ORIGINS", "*").strip()
+allow_origins = (
+    ["*"]
+    if cors_origins == "*"
+    else [origin.strip() for origin in cors_origins.split(",") if origin.strip()]
+)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=allow_origins,
+    allow_credentials=False,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 
 @app.on_event("startup")
@@ -175,3 +197,10 @@ def delete_user(user_id: int, db: Session = Depends(get_db)):
     db.commit()
 
     return {"data": db_user}
+
+
+@app.post("/passwords", status_code=201)
+def save_password(payload: PasswordCreate, db: Session = Depends(get_db)):
+    # For now, we just print it to the server logs to prove we got it
+    print(f"Received password from frontend: {payload.password}")
+    return {"message": "Password received and logged!"}
